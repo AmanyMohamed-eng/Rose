@@ -1,142 +1,74 @@
-const orderService = require('./order.service');
-const {
-  validateCreateOrder,
-  validateUpdateStatus,
-  validateAssignFlorist,
-  validateCancel,
-} = require('./order.validation');
+const service = require('./order.service');
+const serializer = require('./order.serializer');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
+const { logAction } = require('../admin/adminLog.service');
+const { ROLES } = require('../../constants');
 
+const createOrder = asyncHandler(async (req, res) => {
+  const order = await service.createOrder(req.user.id, req.body);
+  sendSuccess(res, { status: 201, message: 'Order placed successfully', data: { order: serializer.toCustomerView(order) } });
+});
 
-const createOrder = async (req, res, next) => {
-  try {
-    validateCreateOrder(req.body);
-    const order = await orderService.createOrder(req.user.id, req.body);
-    res.status(201).json({ message: 'Order placed successfully', order });
-  } catch (error) {
-    next(error);
-  }
-};
+const getMyOrders = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: await service.getMyOrders(req.user.id, req.query.page, req.query.limit, req.query.status) });
+});
 
-const getMyOrders = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 10);
-    const result = await orderService.getMyOrders(
-      req.user.id,
-      page,
-      limit,
-      req.query.status
-    );
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
+const getOrder = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { order: await service.getOrderById(req.params.id, req.user) } });
+});
 
-const getOrder = async (req, res, next) => {
-  try {
-    const order = await orderService.getOrderById(req.params.id, req.user);
-    res.status(200).json({ order });
-  } catch (error) {
-    next(error);
-  }
-};
+const trackOrder = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { tracking: await service.trackOrder(req.params.id, req.user) } });
+});
 
-const cancelOrder = async (req, res, next) => {
-  try {
-    validateCancel(req.body);
-    const order = await orderService.cancelOrder(
-      req.params.id,
-      req.user,
-      req.body.reason
-    );
-    res.status(200).json({ message: 'Order cancelled', order });
-  } catch (error) {
-    next(error);
-  }
-};
+const cancelOrder = asyncHandler(async (req, res) => {
+  const order = await service.cancelOrder(req.params.id, req.user, req.body.reason);
+  if (req.user.role === ROLES.ADMIN) logAction(req, 'ORDER_CANCELLED', 'ORDER', req.params.id, { note: req.body.reason });
+  sendSuccess(res, { message: 'Order cancelled', data: { order } });
+});
 
-const listOrders = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 20);
-    const result = await orderService.listOrders(req.query, page, limit);
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
+const listOrders = asyncHandler(async (req, res) => {
+  const { page, limit, ...filters } = req.query;
+  sendSuccess(res, { data: await service.listOrders(filters, page, limit) });
+});
 
-const updateStatus = async (req, res, next) => {
-  try {
-    validateUpdateStatus(req.body);
-    const order = await orderService.updateStatus(
-      req.params.id,
-      req.body.status,
-      req.user.id,
-      req.body.note
-    );
-    res.status(200).json({ message: 'Status updated', order });
-  } catch (error) {
-    next(error);
-  }
-};
+const updateStatus = asyncHandler(async (req, res) => {
+  const order = await service.updateStatus(req.params.id, req.body.status, req.user.id, req.body.note);
+  logAction(req, req.body.status === 'CANCELLED' ? 'ORDER_CANCELLED' : 'ORDER_STATUS_UPDATED', 'ORDER', req.params.id, {
+    after: { status: order.status },
+    note: req.body.note,
+  });
+  sendSuccess(res, { message: 'Status updated', data: { order } });
+});
 
-const assignFlorist = async (req, res, next) => {
-  try {
-    validateAssignFlorist(req.body);
-    const order = await orderService.assignFlorist(
-      req.params.id,
-      req.body.floristId,
-      req.user.id
-    );
-    res.status(200).json({ message: 'Florist assigned', order });
-  } catch (error) {
-    next(error);
-  }
-};
+const assignFlorist = asyncHandler(async (req, res) => {
+  const order = await service.assignFlorist(req.params.id, req.body.floristId);
+  logAction(req, 'ORDER_ASSIGNED', 'ORDER', req.params.id, { after: { assignedFlorist: req.body.floristId } });
+  sendSuccess(res, { message: 'Florist assigned', data: { order } });
+});
 
-const getAdminStats = async (req, res, next) => {
-  try {
-    const stats = await orderService.getAdminStats();
-    res.status(200).json(stats);
-  } catch (error) {
-    next(error);
-  }
-};
+const updatePayment = asyncHandler(async (req, res) => {
+  const order = await service.updatePayment(req.params.id, req.body);
+  logAction(req, 'ORDER_PAYMENT_UPDATED', 'ORDER', req.params.id, { after: { paymentStatus: order.paymentStatus } });
+  sendSuccess(res, { message: 'Payment status updated', data: { order } });
+});
 
-const getFloristQueue = async (req, res, next) => {
-  try {
-    const items = await orderService.getFloristQueue(req.user.id);
-    res.status(200).json({ count: items.length, items });
-  } catch (error) {
-    next(error);
-  }
-};
+const getAdminStats = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: await service.getAdminStats() });
+});
 
-const updatePrepStatus = async (req, res, next) => {
-  try {
-    const order = await orderService.updatePrepStatus(
-      req.params.id,
-      req.user.id,
-      req.body.status,
-      req.body.note
-    );
-    res.status(200).json({ message: 'Prep status updated', order });
-  } catch (error) {
-    next(error);
-  }
-};
+const getFloristQueue = asyncHandler(async (req, res) => {
+  const items = await service.getFloristQueue(req.user.id);
+  sendSuccess(res, { data: { count: items.length, items } });
+});
+
+const updatePrepStatus = asyncHandler(async (req, res) => {
+  const order = await service.updatePrepStatus(req.params.id, req.user.id, req.body.status, req.body.note);
+  sendSuccess(res, { message: 'Prep status updated', data: { order } });
+});
 
 module.exports = {
-  createOrder,
-  getMyOrders,
-  getOrder,
-  cancelOrder,
-  listOrders,
-  updateStatus,
-  assignFlorist,
-  getAdminStats,
-  getFloristQueue,
-  updatePrepStatus,
+  createOrder, getMyOrders, getOrder, trackOrder, cancelOrder, listOrders, updateStatus,
+  assignFlorist, updatePayment, getAdminStats, getFloristQueue, updatePrepStatus,
 };

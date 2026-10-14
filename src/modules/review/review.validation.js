@@ -3,16 +3,16 @@ const AppError = require('../../utils/AppError');
 const validateCreateReview = (body) => {
   const { productId, orderId, rating, comment } = body;
 
-  if (!productId || !/^[0-9a-fA-F]{24}$/.test(productId)) {
+  if (typeof productId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(productId)) {
     throw new AppError('Valid productId is required', 400);
   }
-  if (!orderId || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
+  if (typeof orderId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
     throw new AppError('Valid orderId is required', 400);
   }
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     throw new AppError('Rating must be an integer between 1 and 5', 400);
   }
-  if (!comment || comment.trim().length < 3) {
+  if (typeof comment !== 'string' || comment.trim().length < 3) {
     throw new AppError('Comment must be at least 3 characters', 400);
   }
   if (comment.length > 1000) {

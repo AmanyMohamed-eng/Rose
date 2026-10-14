@@ -1,57 +1,44 @@
-const authService = require('./auth.services');
-const AppError = require('../../utils/AppError');
+const authService = require('./auth.service');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
 
-const register = async (req, res, next) => {
-  try {
-    const { name, email, password } = req.body;
+const register = asyncHandler(async (req, res) => {
+  const user = await authService.registerCustomer(req.body);
+  sendSuccess(res, { status: 201, message: 'User registered successfully', data: { user } });
+});
 
-    if (!name || !email || !password) {
-      throw new AppError('Name, email and password are required', 400);
-    }
+const registerFlorist = asyncHandler(async (req, res) => {
+  const user = await authService.registerFlorist(req.body);
+  sendSuccess(res, {
+    status: 201,
+    message: 'Florist application submitted. You will be able to work once an admin approves your account.',
+    data: { user },
+  });
+});
 
-    const user = await authService.register({ name, email, password });
+const login = asyncHandler(async (req, res) => {
+  const result = await authService.login(req.body.email, req.body.password, req);
+  sendSuccess(res, { message: 'Login successful', data: result });
+});
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      user,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const logout = asyncHandler(async (req, res) => {
+  await authService.logout(req.user.id, req.user.role, req);
+  sendSuccess(res, { message: 'Logged out successfully' });
+});
 
-const login = async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
+const me = asyncHandler(async (req, res) => {
+  const user = await authService.getMe(req.user.id);
+  sendSuccess(res, { data: { user } });
+});
 
-    if (!email || !password) {
-      throw new AppError('Email and password are required', 400);
-    }
+const updateMe = asyncHandler(async (req, res) => {
+  const user = await authService.updateMe(req.user.id, req.body);
+  sendSuccess(res, { message: 'Profile updated', data: { user } });
+});
 
-    const result = await authService.login(email, password);
+const changePassword = asyncHandler(async (req, res) => {
+  const result = await authService.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword);
+  sendSuccess(res, { message: 'Password changed successfully', data: result });
+});
 
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-const me = async (req, res, next) => {
-  try {
-    if (!req.user?.id) {
-      throw new AppError('Authentication required', 401);
-    }
-
-    const user = await authService.getUserById(req.user.id);
-
-    res.status(200).json({ user });
-  } catch (error) {
-    next(error);
-  }
-};
-
-module.exports = {
-  register,
-  login,
-  me,
-};
+module.exports = { register, registerFlorist, login, logout, me, updateMe, changePassword };

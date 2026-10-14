@@ -1,91 +1,24 @@
-const AppError = require("../../utils/AppError");
+const { z, objectId } = require('../../validators/common');
 
-const validateCreate = (data) => {
-  const { name, description, image, displayOrder } = data;
+const name = z.string().trim().min(2, 'Category name must be at least 2 characters').max(100);
+const description = z.string().trim().max(300).nullable();
+const image = z.string().trim().max(500).nullable();
+const displayOrder = z.number().int().min(0);
 
-  if (!name || typeof name !== "string" || !name.trim()) {
-    throw new AppError("Category name is required", 400);
-  }
+const create = z.object({
+  name,
+  description: description.optional(),
+  image: image.optional(),
+  displayOrder: displayOrder.optional(),
+});
 
-  if (name.trim().length < 2) {
-    throw new AppError("Category name must be at least 2 characters", 400);
-  }
+const update = z
+  .object({ name, description, image, displayOrder, isActive: z.boolean() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'At least one field is required for update');
 
-  if (name.trim().length > 100) {
-    throw new AppError("Category name must not exceed 100 characters", 400);
-  }
+const setOrder = z.object({ displayOrder });
+const idParams = z.object({ id: objectId });
+const slugParams = z.object({ slug: z.string().trim().toLowerCase().min(1).max(120) });
 
-  if (
-    description !== undefined &&
-    description !== null &&
-    typeof description !== "string"
-  ) {
-    throw new AppError("Description must be a string", 400);
-  }
-
-  if (image !== undefined && image !== null && typeof image !== "string") {
-    throw new AppError("Image must be a string", 400);
-  }
-
-  if (
-    displayOrder !== undefined &&
-    (typeof displayOrder !== "number" ||
-      !Number.isInteger(displayOrder) ||
-      displayOrder < 0)
-  ) {
-    throw new AppError("Display order must be a non-negative integer", 400);
-  }
-};
-
-
-const validateUpdate = (data) => {
-  const { name, description, image, isActive, displayOrder } = data;
-
-  if (Object.keys(data).length === 0) {
-    throw new AppError("At least one field is required for update", 400);
-  }
-
-  if (name !== undefined) {
-    if (typeof name !== "string" || !name.trim()) {
-      throw new AppError("Category name must be a valid string", 400);
-    }
-
-    if (name.trim().length < 2) {
-      throw new AppError("Category name must be at least 2 characters", 400);
-    }
-
-    if (name.trim().length > 100) {
-      throw new AppError("Category name must not exceed 100 characters", 400);
-    }
-  }
-
-  if (
-    description !== undefined &&
-    description !== null &&
-    typeof description !== "string"
-  ) {
-    throw new AppError("Description must be a string", 400);
-  }
-
-  if (image !== undefined && image !== null && typeof image !== "string") {
-    throw new AppError("Image must be a string", 400);
-  }
-
-  if (isActive !== undefined && typeof isActive !== "boolean") {
-    throw new AppError("isActive must be a boolean", 400);
-  }
-
-  if (
-    displayOrder !== undefined &&
-    (typeof displayOrder !== "number" ||
-      !Number.isInteger(displayOrder) ||
-      displayOrder < 0)
-  ) {
-    throw new AppError("Display order must be a non-negative integer", 400);
-  }
-};
-
-module.exports = {
-  validateCreate,
-  validateUpdate,
-};
+module.exports = { create, update, setOrder, idParams, slugParams };

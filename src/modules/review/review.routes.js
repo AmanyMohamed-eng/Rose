@@ -1,27 +1,31 @@
 const express = require('express');
-
-const reviewController = require('./review.controller');
-const authMiddleware = require('../../middleware/auth.middleware');
+const ctrl = require('./review.controller');
+const v = require('./review.validator');
+const validate = require('../../middleware/validate.middleware');
+const authenticate = require('../../middleware/auth.middleware');
 const { allowRoles } = require('../../middleware/role.middleware');
+const { ROLES } = require('../../constants');
 
+// Mounted by the products router at /api/v1/products/:productId/reviews (public, approved reviews only).
 const productReviewRouter = express.Router({ mergeParams: true });
+productReviewRouter.get('/', validate({ params: v.productParams, query: v.productReviewsQuery }), ctrl.getProductReviews);
 
-productReviewRouter.get('/', reviewController.getProductReviews);
-
+// Mounted at /api/v1/reviews
 const reviewRouter = express.Router();
+reviewRouter.use(authenticate);
 
-reviewRouter.post('/:id/helpful', reviewController.markHelpful);
+const customer = allowRoles(ROLES.CUSTOMER);
+const admin = allowRoles(ROLES.ADMIN);
 
-reviewRouter.use(authMiddleware);
+reviewRouter.post('/', customer, validate({ body: v.create }), ctrl.addReview);
+reviewRouter.get('/my', customer, validate({ query: v.myReviewsQuery }), ctrl.getMyReviews);
 
-reviewRouter.post('/', allowRoles('customer'), reviewController.addReview);
-reviewRouter.get('/my', allowRoles('customer'), reviewController.getMyReviews);
+reviewRouter.get('/admin/all', admin, validate({ query: v.adminListQuery }), ctrl.listAllReviews);
+reviewRouter.patch('/:id/moderate', admin, validate({ params: v.idParams, body: v.moderate }), ctrl.moderateReview);
 
-reviewRouter.get('/admin/all', allowRoles('admin'), reviewController.listAllReviews);
-reviewRouter.patch('/:id/moderate', allowRoles('admin'), reviewController.moderateReview);
-
-reviewRouter.get('/:id', reviewController.getReview);
-reviewRouter.patch('/:id', allowRoles('customer'), reviewController.updateReview);
-reviewRouter.delete('/:id', reviewController.deleteReview);
+reviewRouter.post('/:id/helpful', customer, validate({ params: v.idParams }), ctrl.markHelpful);
+reviewRouter.get('/:id', allowRoles(ROLES.CUSTOMER, ROLES.ADMIN), validate({ params: v.idParams }), ctrl.getReview);
+reviewRouter.patch('/:id', customer, validate({ params: v.idParams, body: v.update }), ctrl.updateReview);
+reviewRouter.delete('/:id', allowRoles(ROLES.CUSTOMER, ROLES.ADMIN), validate({ params: v.idParams }), ctrl.deleteReview);
 
 module.exports = { productReviewRouter, reviewRouter };

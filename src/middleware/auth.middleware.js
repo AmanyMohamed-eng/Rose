@@ -1,21 +1,36 @@
-const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+const User = require('../models/User');
 const AppError = require('../utils/AppError');
+const asyncHandler = require('../utils/asyncHandler');
+const { verifyToken } = require('../utils/jwt');
 
-const authMiddleware = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader?.startsWith('Bearer ')) {
-    return next(new AppError('Authentication required', 401));
+/**
+ * Verifies the Bearer token AND re-checks the user in the database, so that
+ * blocked users, logged-out sessions (tokenVersion) and role changes take effect immediately.
+ */
+const authenticate = asyncHandler(async (req, res, next) => {
+  const header = req.headers.authorization;
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
+    throw new AppError('Authentication required', 401);
   }
+  const token = header.slice(7).trim();
+  if (!token) throw new AppError('Authentication required', 401);
 
-  const token = authHeader.slice(7);
-
+  let payload;
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
+    payload = verifyToken(token);
   } catch (err) {
-    next(new AppError('Invalid or expired token', 401));
+    throw new AppError(err.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token', 401);
   }
-};
+  if (!mongoose.isValidObjectId(payload.id)) throw new AppError('Invalid token', 401);
 
-module.exports = authMiddleware;
+  const user = await User.findById(payload.id).select('name email role isActive tokenVersion');
+  if (!user) throw new AppError('Invalid token', 401);
+  if (!user.isActive) throw new AppError('Your account has been deactivated', 403);
+  if ((payload.tv || 0) !== user.tokenVersion) throw new AppError('Session expired, please log in again', 401);
+
+  req.user = { id: user.id, role: user.role, name: user.name, email: user.email };
+  next();
+});
+
+module.exports = authenticate;

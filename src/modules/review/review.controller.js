@@ -1,94 +1,54 @@
-const reviewService = require('./review.services');
-const {
-  validateCreateReview,
-  validateUpdateReview,
-  validateModeration,
-} = require('./review.validation');
+const service = require('./review.service');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
+const { logAction } = require('../admin/adminLog.service');
+const { ROLES } = require('../../constants');
 
-const addReview = async (req, res, next) => {
-  try {
-    validateCreateReview(req.body);
-    const review = await reviewService.addReview(req.user.id, req.body);
-    res.status(201).json({ message: 'Review submitted', review });
-  } catch (e) { next(e); }
-};
+const addReview = asyncHandler(async (req, res) => {
+  const review = await service.addReview(req.user.id, req.body);
+  sendSuccess(res, { status: 201, message: 'Review submitted', data: { review } });
+});
 
-const getMyReviews = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 10);
-    const result = await reviewService.getMyReviews(req.user.id, page, limit);
-    res.status(200).json(result);
-  } catch (e) { next(e); }
-};
+const getMyReviews = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: await service.getMyReviews(req.user.id, req.query.page, req.query.limit) });
+});
 
-const updateReview = async (req, res, next) => {
-  try {
-    validateUpdateReview(req.body);
-    const review = await reviewService.updateReview(req.params.id, req.user.id, req.body);
-    res.status(200).json({ message: 'Review updated', review });
-  } catch (e) { next(e); }
-};
+const updateReview = asyncHandler(async (req, res) => {
+  const review = await service.updateReview(req.params.id, req.user.id, req.body);
+  sendSuccess(res, { message: 'Review updated', data: { review } });
+});
 
-const deleteReview = async (req, res, next) => {
-  try {
-    await reviewService.deleteReview(req.params.id, req.user);
-    res.status(204).send();
-  } catch (e) { next(e); }
-};
+const deleteReview = asyncHandler(async (req, res) => {
+  const review = await service.deleteReview(req.params.id, req.user);
+  if (req.user.role === ROLES.ADMIN) logAction(req, 'REVIEW_DELETED', 'REVIEW', review._id, { before: { product: review.product, rating: review.rating } });
+  sendSuccess(res, { message: 'Review deleted' });
+});
 
-const getProductReviews = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 10);
-    const result = await reviewService.getProductReviews(
-      req.params.productId, page, limit, req.query
-    );
-    res.status(200).json(result);
-  } catch (e) { next(e); }
-};
+const getProductReviews = asyncHandler(async (req, res) => {
+  const { page, limit, ...filters } = req.query;
+  sendSuccess(res, { data: await service.getProductReviews(req.params.productId, page, limit, filters) });
+});
 
-const markHelpful = async (req, res, next) => {
-  try {
-    const review = await reviewService.markHelpful(req.params.id);
-    res.status(200).json({ message: 'Marked as helpful', helpfulCount: review.helpfulCount });
-  } catch (e) { next(e); }
-};
+const markHelpful = asyncHandler(async (req, res) => {
+  const review = await service.markHelpful(req.params.id, req.user.id);
+  sendSuccess(res, { message: 'Marked as helpful', data: { helpfulCount: review.helpfulCount } });
+});
 
-const getReview = async (req, res, next) => {
-  try {
-    const review = await reviewService.getReviewById(req.params.id, req.user);
-    res.status(200).json({ review });
-  } catch (e) { next(e); }
-};
+const getReview = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { review: await service.getReviewById(req.params.id, req.user) } });
+});
 
-const listAllReviews = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 20);
-    const result = await reviewService.listAllReviews(req.query, page, limit);
-    res.status(200).json(result);
-  } catch (e) { next(e); }
-};
+const listAllReviews = asyncHandler(async (req, res) => {
+  const { page, limit, ...filters } = req.query;
+  sendSuccess(res, { data: await service.listAllReviews(filters, page, limit) });
+});
 
-const moderateReview = async (req, res, next) => {
-  try {
-    validateModeration(req.body);
-    const review = await reviewService.moderateReview(
-      req.params.id, req.body.status, req.body.note
-    );
-    res.status(200).json({ message: `Review ${req.body.status.toLowerCase()}`, review });
-  } catch (e) { next(e); }
-};
+const moderateReview = asyncHandler(async (req, res) => {
+  const review = await service.moderateReview(req.params.id, req.body.status, req.body.note);
+  logAction(req, review.status === 'APPROVED' ? 'REVIEW_APPROVED' : 'REVIEW_REJECTED', 'REVIEW', review._id, { note: req.body.note });
+  sendSuccess(res, { message: `Review ${review.status.toLowerCase()}`, data: { review } });
+});
 
 module.exports = {
-  addReview,
-  getMyReviews,
-  updateReview,
-  deleteReview,
-  getProductReviews,
-  markHelpful,
-  getReview,
-  listAllReviews,
-  moderateReview,
+  addReview, getMyReviews, updateReview, deleteReview, getProductReviews, markHelpful, getReview, listAllReviews, moderateReview,
 };

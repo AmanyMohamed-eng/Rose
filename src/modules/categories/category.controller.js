@@ -1,187 +1,64 @@
-const categoryService = require('./category.service');
-const {
-  validateCreate,
-  validateUpdate,
-} = require('./category.validator');
+const service = require('./category.service');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
+const { logAction } = require('../admin/adminLog.service');
 
+const listCategories = asyncHandler(async (req, res) => {
+  const categories = await service.listCategories();
+  sendSuccess(res, { data: { count: categories.length, categories } });
+});
 
+const listAllCategories = asyncHandler(async (req, res) => {
+  const categories = await service.listAllCategories();
+  sendSuccess(res, { data: { count: categories.length, categories } });
+});
 
-/*
- * GET /api/v1/categories
- * Public — active categories
- */
-const listCategories = async (req, res, next) => {
-  try {
-    const categories = await categoryService.listCategories();
+const getCategory = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { category: await service.getCategoryBySlug(req.params.slug) } });
+});
 
-    res.status(200).json({
-      count: categories.length,
-      categories,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const createCategory = asyncHandler(async (req, res) => {
+  const category = await service.createCategory(req.body);
+  logAction(req, 'CATEGORY_CREATED', 'CATEGORY', category._id, { after: category.toJSON() });
+  sendSuccess(res, { status: 201, message: 'Category created successfully', data: { category } });
+});
 
+const updateCategory = asyncHandler(async (req, res) => {
+  const before = (await service.getCategoryById(req.params.id)).toJSON();
+  const category = await service.updateCategory(req.params.id, req.body);
+  logAction(req, 'CATEGORY_UPDATED', 'CATEGORY', category._id, { before, after: category.toJSON() });
+  sendSuccess(res, { message: 'Category updated successfully', data: { category } });
+});
 
-/*
- * GET /api/v1/categories/:slug
- * Public — category details
- */
-const getCategory = async (req, res, next) => {
-  try {
-    const category = await categoryService.getCategoryBySlug(
-      req.params.slug
-    );
+// Soft delete
+const deleteCategory = asyncHandler(async (req, res) => {
+  const category = await service.setActive(req.params.id, false);
+  logAction(req, 'CATEGORY_DELETED', 'CATEGORY', category._id, { note: `Deactivated "${category.name}"` });
+  sendSuccess(res, { message: 'Category deleted successfully', data: { category } });
+});
 
-    res.status(200).json({
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const restoreCategory = asyncHandler(async (req, res) => {
+  const category = await service.setActive(req.params.id, true);
+  logAction(req, 'CATEGORY_UPDATED', 'CATEGORY', category._id, { note: 'Category restored' });
+  sendSuccess(res, { message: 'Category restored successfully', data: { category } });
+});
 
+const toggleCategoryStatus = asyncHandler(async (req, res) => {
+  const category = await service.toggleCategoryStatus(req.params.id);
+  logAction(req, 'CATEGORY_UPDATED', 'CATEGORY', category._id, { after: { isActive: category.isActive } });
+  sendSuccess(res, {
+    message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
+    data: { category },
+  });
+});
 
-/*
- * POST /api/v1/categories
- * Admin only
- */
-const createCategory = async (req, res, next) => {
-  try {
-    validateCreate(req.body);
-
-    const category = await categoryService.createCategory(req.body);
-
-    res.status(201).json({
-      message: 'Category created successfully',
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/*
- * PATCH /api/v1/categories/:id
- * Admin only
- */
-const updateCategory = async (req, res, next) => {
-  try {
-    validateUpdate(req.body);
-
-    const category = await categoryService.updateCategory(
-      req.params.id,
-      req.body
-    );
-
-    res.status(200).json({
-      message: 'Category updated successfully',
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/*
- * DELETE /api/v1/categories/:id
- * Admin only — soft delete
- */
-const deleteCategory = async (req, res, next) => {
-  try {
-    await categoryService.softDeleteCategory(req.params.id);
-
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-/*
- * PATCH /api/v1/categories/:id/restore
- * Admin only — restore soft-deleted category
- */
-const restoreCategory = async (req, res, next) => {
-  try {
-    const category = await categoryService.restoreCategory(
-      req.params.id
-    );
-
-    res.status(200).json({
-      message: 'Category restored successfully',
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-/*
- * PATCH /api/v1/categories/:id/status
- * Admin only — toggle active status
- */
-const toggleCategoryStatus = async (req, res, next) => {
-  try {
-    const category = await categoryService.toggleCategoryStatus(
-      req.params.id
-    );
-
-    res.status(200).json({
-      message: `Category ${
-        category.isActive ? 'activated' : 'deactivated'
-      } successfully`,
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-/*
- * PATCH /api/v1/categories/:id/order
- * Admin only — update display order
- * Body: { displayOrder: number }
- */
-const updateDisplayOrder = async (req, res, next) => {
-  try {
-    const { displayOrder } = req.body;
-
-    if (
-      displayOrder == null ||
-      typeof displayOrder !== 'number' ||
-      displayOrder < 0
-    ) {
-      return res.status(400).json({
-        message: 'Valid displayOrder is required',
-      });
-    }
-
-    const category = await categoryService.updateDisplayOrder(
-      req.params.id,
-      displayOrder
-    );
-
-    res.status(200).json({
-      message: 'Category order updated successfully',
-      category,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
+const updateDisplayOrder = asyncHandler(async (req, res) => {
+  const category = await service.updateDisplayOrder(req.params.id, req.body.displayOrder);
+  logAction(req, 'CATEGORY_UPDATED', 'CATEGORY', category._id, { after: { displayOrder: category.displayOrder } });
+  sendSuccess(res, { message: 'Category order updated successfully', data: { category } });
+});
 
 module.exports = {
-  listCategories,
-  getCategory,
-  createCategory,
-  updateCategory,
-  deleteCategory,
-  restoreCategory,
-  toggleCategoryStatus,
-  updateDisplayOrder,
+  listCategories, listAllCategories, getCategory, createCategory, updateCategory,
+  deleteCategory, restoreCategory, toggleCategoryStatus, updateDisplayOrder,
 };

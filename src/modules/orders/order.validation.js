@@ -4,14 +4,16 @@ const DELIVERY_SLOTS = ['09:00-12:00', '12:00-15:00', '15:00-18:00', '18:00-21:0
 const SIZES = ['Standard', 'Deluxe', 'Premium'];
 
 const validateCreateOrder = (body) => {
-  const { items, delivery, paymentMethod, couponCode } = body;
+  const { items, delivery, paymentMethod, couponCode } = body || {};
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new AppError('Order must contain at least one item', 400);
   }
   items.forEach((item, idx) => {
     const tag = `Item ${idx + 1}`;
-    if (!item.productId) throw new AppError(`${tag}: productId is required`, 400);
+    if (!item.productId || !/^[0-9a-fA-F]{24}$/.test(String(item.productId))) {
+      throw new AppError(`${tag}: a valid productId is required`, 400);
+    }
     if (!Number.isInteger(item.quantity) || item.quantity < 1) {
       throw new AppError(`${tag}: quantity must be a positive integer`, 400);
     }
@@ -67,23 +69,23 @@ const validateUpdateStatus = (body) => {
     'DELIVERED',
     'CANCELLED',
   ];
-  if (!body.status || !allowed.includes(body.status)) {
+  if (!body || !body.status || !allowed.includes(body.status)) {
     throw new AppError('Invalid status', 400);
   }
-  if (body.note && body.note.length > 200) {
+  if (typeof body.note === 'string' && body.note.length > 200) {
     throw new AppError('Note too long (max 200)', 400);
   }
 };
 
 const validateAssignFlorist = (body) => {
-  if (!body.floristId) throw new AppError('floristId is required', 400);
+  if (!body || !body.floristId) throw new AppError('floristId is required', 400);
   if (!/^[0-9a-fA-F]{24}$/.test(body.floristId)) {
     throw new AppError('Invalid floristId', 400);
   }
 };
 
 const validateCancel = (body) => {
-  if (body.reason && body.reason.length > 300) {
+  if (body && body.reason && body.reason.length > 300) {
     throw new AppError('Cancellation reason too long (max 300)', 400);
   }
 };

@@ -33,6 +33,10 @@ const login = async (email, password) => {
     throw new AppError('Invalid Email or Password', 401);
   }
 
+  if (existingUser.isActive === false) {
+    throw new AppError('Account is deactivated', 403);
+  }
+
   const isMatch = await bcrypt.compare(password, existingUser.password);
 
   if (!isMatch) {

@@ -1,145 +1,80 @@
-const productService = require('./product.service');
-const { validateCreate, validateUpdate } = require('./product.validator');
+const service = require('./product.service');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
+const { logAction } = require('../admin/adminLog.service');
 
-/**
- * GET /api/v1/products
- * Public — customer catalog
- */
-const listProducts = async (req, res, next) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 12);
+// ---------- Public ----------
+const listProducts = asyncHandler(async (req, res) => {
+  const { page, limit, ...filters } = req.query;
+  sendSuccess(res, { data: await service.listProducts(filters, page, limit) });
+});
 
-    const result = await productService.listProducts(req.query, page, limit);
+const getProduct = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { product: await service.getProductBySlug(req.params.slug) } });
+});
 
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
+// ---------- Admin ----------
+const adminList = asyncHandler(async (req, res) => {
+  const { page, limit, ...filters } = req.query;
+  sendSuccess(res, { data: await service.listAdminProducts(filters, page, limit) });
+});
 
-/**
- * GET /api/v1/products/:slug
- * Public — product detail
- */
-const getProduct = async (req, res, next) => {
-  try {
-    const product = await productService.getProductBySlug(req.params.slug);
-    res.status(200).json({ product });
-  } catch (error) {
-    next(error);
-  }
-};
+const adminGet = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { product: await service.getProductById(req.params.id) } });
+});
 
-/**
- * POST /api/v1/products
- * Admin only
- */
-const createProduct = async (req, res, next) => {
-  try {
-    validateCreate(req.body);
+const createProduct = asyncHandler(async (req, res) => {
+  const product = await service.createProduct(req.body, req.user);
+  logAction(req, 'PRODUCT_CREATED', 'PRODUCT', product._id, { after: { title: product.title, price: product.price } });
+  sendSuccess(res, { status: 201, message: 'Product created successfully', data: { product } });
+});
 
-    const product = await productService.createProduct(req.body, req.user.id);
+const updateProduct = asyncHandler(async (req, res) => {
+  const before = (await service.getProductById(req.params.id)).toJSON();
+  const product = await service.updateProduct(req.params.id, req.body, req.user);
+  logAction(req, 'PRODUCT_UPDATED', 'PRODUCT', product._id, {
+    before: { title: before.title, price: before.price, isActive: before.isActive },
+    after: { title: product.title, price: product.price, isActive: product.isActive },
+  });
+  sendSuccess(res, { message: 'Product updated successfully', data: { product } });
+});
 
-    res.status(201).json({
-      message: 'Product created successfully',
-      product,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const deleteProduct = asyncHandler(async (req, res) => {
+  const product = await service.softDeleteProduct(req.params.id, req.user);
+  logAction(req, 'PRODUCT_DELETED', 'PRODUCT', product._id, { note: `Deactivated "${product.title}"` });
+  sendSuccess(res, { message: 'Product deleted successfully' });
+});
 
-/**
- * PATCH /api/v1/products/:id
- * Admin only
- */
-const updateProduct = async (req, res, next) => {
-  try {
-    validateUpdate(req.body);
+const toggleFeatured = asyncHandler(async (req, res) => {
+  const product = await service.toggleFeatured(req.params.id);
+  logAction(req, 'PRODUCT_FEATURED_TOGGLED', 'PRODUCT', product._id, { after: { isFeatured: product.isFeatured } });
+  sendSuccess(res, { message: `Product ${product.isFeatured ? 'featured' : 'unfeatured'}`, data: { product } });
+});
 
-    const product = await productService.updateProduct(req.params.id, req.body);
+const setStock = asyncHandler(async (req, res) => {
+  const before = (await service.getProductById(req.params.id)).stockQuantity;
+  const product = await service.setStockQuantity(req.params.id, req.body.quantity);
+  logAction(req, 'PRODUCT_STOCK_UPDATED', 'PRODUCT', product._id, {
+    before: { stockQuantity: before },
+    after: { stockQuantity: product.stockQuantity },
+  });
+  sendSuccess(res, { message: 'Stock updated', data: { product } });
+});
 
-    res.status(200).json({
-      message: 'Product updated successfully',
-      product,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const setApproval = asyncHandler(async (req, res) => {
+  const product = await service.setApproval(req.params.id, req.body.status, req.body.note);
+  logAction(req, product.approvalStatus === 'APPROVED' ? 'PRODUCT_APPROVED' : 'PRODUCT_REJECTED', 'PRODUCT', product._id, {
+    note: req.body.note,
+  });
+  sendSuccess(res, { message: `Product ${product.approvalStatus.toLowerCase()}`, data: { product } });
+});
 
-/**
- * DELETE /api/v1/products/:id
- * Admin only — soft delete
- */
-const deleteProduct = async (req, res, next) => {
-  try {
-    await productService.softDeleteProduct(req.params.id);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * PATCH /api/v1/products/:id/featured
- * Admin only — toggle isFeatured
- */
-const toggleFeatured = async (req, res, next) => {
-  try {
-    const product = await productService.toggleFeatured(req.params.id);
-    res.status(200).json({
-      message: `Product ${product.isFeatured ? 'featured' : 'unfeatured'}`,
-      product,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * PATCH /api/v1/products/:id/stock
- * Admin only — set stock quantity (restock or correction)
- * Body: { quantity: number }  (absolute set)
- */
-const setStock = async (req, res, next) => {
-  try {
-    const { quantity } = req.body;
-    if (quantity == null || quantity < 0) {
-      return next(new (require('../utils/AppError'))('Valid quantity required', 400));
-    }
-
-    const current = await productService.getProductById(req.params.id);
-    const delta = quantity - current.stockQuantity;
-
-    const product = await productService.adjustStock(req.params.id, delta);
-    res.status(200).json({ message: 'Stock updated', product });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * GET /api/v1/products/admin/low-stock
- * Admin only
- */
-const getLowStock = async (req, res, next) => {
-  try {
-    const items = await productService.getLowStockProducts();
-    res.status(200).json({ count: items.length, items });
-  } catch (error) {
-    next(error);
-  }
-};
+const getLowStock = asyncHandler(async (req, res) => {
+  const items = await service.getLowStockProducts();
+  sendSuccess(res, { data: { count: items.length, items } });
+});
 
 module.exports = {
-  listProducts,
-  getProduct,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-  toggleFeatured,
-  setStock,
-  getLowStock,
+  listProducts, getProduct, adminList, adminGet, createProduct, updateProduct, deleteProduct,
+  toggleFeatured, setStock, setApproval, getLowStock,
 };

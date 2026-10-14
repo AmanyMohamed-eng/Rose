@@ -1,121 +1,35 @@
 const cartService = require('./cart.service');
+const asyncHandler = require('../../utils/asyncHandler');
+const { sendSuccess } = require('../../utils/apiResponse');
 
-const {
-  validateAddProduct,
-  validateUpdateQuantity,
-} = require('./cart.validator');
+// Every handler is scoped to req.user.id — a customer can never address another customer's cart.
 
+const getCart = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: { cart: await cartService.getCart(req.user.id) } });
+});
 
-// GET /api/v1/cart
-const getCart = async (req, res, next) => {
-  try {
-    const cart = await cartService.getCart(req.user.id);
+const addProduct = asyncHandler(async (req, res) => {
+  const cart = await cartService.addProduct(req.user.id, req.body.productId, req.body.quantity);
+  sendSuccess(res, { message: 'Product added to cart successfully', data: { cart } });
+});
 
-    res.status(200).json({
-      cart,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const updateQuantity = asyncHandler(async (req, res) => {
+  const cart = await cartService.updateQuantity(req.user.id, req.params.productId, req.body.quantity);
+  sendSuccess(res, { message: 'Cart quantity updated successfully', data: { cart } });
+});
 
+const removeProduct = asyncHandler(async (req, res) => {
+  const cart = await cartService.removeProduct(req.user.id, req.params.productId);
+  sendSuccess(res, { message: 'Product removed from cart successfully', data: { cart } });
+});
 
-// POST /api/v1/cart/items
-const addProduct = async (req, res, next) => {
-  try {
-    validateAddProduct(req.body);
+const clearCart = asyncHandler(async (req, res) => {
+  const cart = await cartService.clearCart(req.user.id);
+  sendSuccess(res, { message: 'Cart cleared successfully', data: { cart } });
+});
 
-    const { productId, quantity } = req.body;
+const calculateTotal = asyncHandler(async (req, res) => {
+  sendSuccess(res, { data: await cartService.calculateTotal(req.user.id) });
+});
 
-    const cart = await cartService.addProduct(
-      req.user.id,
-      productId,
-      quantity
-    );
-
-    res.status(200).json({
-      message: 'Product added to cart successfully',
-      cart,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// DELETE /api/v1/cart/items/:productId
-const removeProduct = async (req, res, next) => {
-  try {
-    const cart = await cartService.removeProduct(
-      req.user.id,
-      req.params.productId
-    );
-
-    res.status(200).json({
-      message: 'Product removed from cart successfully',
-      cart,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// PATCH /api/v1/cart/items/:productId
-const updateQuantity = async (req, res, next) => {
-  try {
-    validateUpdateQuantity(req.body);
-
-    const { quantity } = req.body;
-
-    const cart = await cartService.updateQuantity(
-      req.user.id,
-      req.params.productId,
-      quantity
-    );
-
-    res.status(200).json({
-      message: 'Cart quantity updated successfully',
-      cart,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// DELETE /api/v1/cart
-const clearCart = async (req, res, next) => {
-  try {
-    const cart = await cartService.clearCart(req.user.id);
-
-    res.status(200).json({
-      message: 'Cart cleared successfully',
-      cart,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// GET /api/v1/cart/total
-const calculateTotal = async (req, res, next) => {
-  try {
-    const result = await cartService.calculateTotal(req.user.id);
-
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-module.exports = {
-  getCart,
-  addProduct,
-  removeProduct,
-  updateQuantity,
-  clearCart,
-  calculateTotal,
-};
+module.exports = { getCart, addProduct, updateQuantity, removeProduct, clearCart, calculateTotal };

@@ -1,43 +1,9 @@
-const AppError = require('../../utils/AppError');
+const { z, objectId } = require('../../validators/common');
 
-const validateAddProduct = (data) => {
-  const { productId, quantity } = data;
+const quantity = z.number({ message: 'Quantity must be a positive integer' }).int('Quantity must be a positive integer').min(1, 'Quantity must be a positive integer').max(100, 'Quantity cannot exceed 100');
 
-  if (!productId) {
-    throw new AppError('Product ID is required', 400);
-  }
+const addProduct = z.object({ productId: objectId, quantity });
+const updateQuantity = z.object({ quantity });
+const productParams = z.object({ productId: objectId });
 
-  if (
-    quantity === undefined ||
-    quantity === null ||
-    !Number.isInteger(quantity) ||
-    quantity < 1
-  ) {
-    throw new AppError(
-      'Quantity must be a positive integer',
-      400
-    );
-  }
-};
-
-const validateUpdateQuantity = (data) => {
-  const { quantity } = data;
-
-  if (
-    quantity === undefined ||
-    quantity === null ||
-    !Number.isInteger(quantity) ||
-    quantity < 1
-  ) {
-    throw new AppError(
-      'Quantity must be a positive integer',
-      400
-    );
-  }
-};
-
-
-module.exports = {
-  validateAddProduct,
-  validateUpdateQuantity,
-};
+module.exports = { addProduct, updateQuantity, productParams };

@@ -1,9 +1,13 @@
+const mongoose = require('mongoose');
 const Review = require('../../models/review');
 const Product = require('../../models/product');
 const Order = require('../../models/order');
 const AppError = require('../../utils/AppError');
 
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+
 const recalcProductRating = async (productId) => {
+  productId = toObjectId(productId);
   const agg = await Review.aggregate([
     { $match: { product: productId, status: 'APPROVED' } },
     {
@@ -73,6 +77,10 @@ const addReview = async (customerId, payload) => {
 };
 
 const getProductReviews = async (productId, page = 1, limit = 10, filters = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    throw new AppError('Invalid product ID', 400);
+  }
+  productId = toObjectId(productId);
   const query = { product: productId, status: 'APPROVED' };
 
   if (filters.rating) query.rating = Number(filters.rating);
@@ -107,7 +115,7 @@ const getReviewById = async (id, user) => {
   const review = await Review.findById(id).populate('customer', 'name');
   if (!review) throw new AppError('Review not found', 404);
 
-  const isOwner = review.customer._id.toString() === user.id;
+  const isOwner = (review.customer?._id || review.customer)?.toString() === user.id;
   const isAdmin = user.role === 'admin';
   if (!isOwner && !isAdmin) throw new AppError('Forbidden', 403);
 
